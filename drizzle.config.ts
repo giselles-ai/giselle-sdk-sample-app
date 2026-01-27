@@ -4,8 +4,8 @@ const databaseUrl = process.env.TURSO_DATABASE_URL;
 const authToken = process.env.TURSO_AUTH_TOKEN;
 
 export default defineConfig({
-  dialect: "turso",
-  schema: "./db/*-schema.ts",
-  out: "./db/migrations",
-  dbCredentials: { url: databaseUrl ?? "", authToken },
+	dialect: "turso",
+	schema: "./db/*-schema.ts",
+	out: "./db/migrations",
+	dbCredentials: { url: databaseUrl ?? "", authToken },
 });
