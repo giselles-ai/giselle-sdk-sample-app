@@ -1,0 +1,23 @@
+[tasks.ok]
+description = "Run format, typecheck, and knip checks"
+run = [
+  { tasks = ["format", "typecheck"] },
+  { task = "done"}
+
+]
+
+[tasks.format]
+run = "bun format"
+hide = true
+silent = true
+
+
+[tasks.typecheck]
+run = "bun typecheck"
+hide = true
+silent = true
+
+[tasks.done]
+run = "echo OK!"
+hide = true
+quiet = true
