@@ -162,7 +162,7 @@ export default function ArticlesPage() {
 						value={description}
 						onChange={(event) => setDescription(event.target.value)}
 						placeholder="What kind of article do you want to create? Enter the theme, objectives, target audience, etc..."
-						className="mt-3 min-h-[140px] w-full rounded-xl border border-neutral-800 bg-neutral-900 p-4 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
+						className="mt-3 min-h-35 w-full rounded-xl border border-neutral-800 bg-neutral-900 p-4 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
 					/>
 				</section>
 
