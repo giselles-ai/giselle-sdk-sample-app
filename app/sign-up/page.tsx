@@ -22,7 +22,7 @@ export default function SignUpPage() {
 			name,
 			email,
 			password,
-			callbackURL: "/dashboard",
+			callbackURL: "/articles",
 		});
 
 		if (error) {
@@ -31,7 +31,7 @@ export default function SignUpPage() {
 			return;
 		}
 
-		router.push("/dashboard");
+		router.push("/articles");
 	};
 
 	return (

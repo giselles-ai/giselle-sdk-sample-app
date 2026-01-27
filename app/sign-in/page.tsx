@@ -20,7 +20,7 @@ export default function SignInPage() {
 		const { error } = await authClient.signIn.email({
 			email,
 			password,
-			callbackURL: "/dashboard",
+			callbackURL: "/articles",
 		});
 
 		if (error) {
@@ -29,7 +29,7 @@ export default function SignInPage() {
 			return;
 		}
 
-		router.push("/dashboard");
+		router.push("/articles");
 	};
 
 	return (
