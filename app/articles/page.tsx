@@ -307,7 +307,7 @@ export default function ArticlesPage() {
 						) : null}
 					</div>
 
-					<div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-950 p-4">
+					<div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-950 p-4 hidden">
 						<div className="text-xs font-semibold text-neutral-400">
 							Image Materials
 						</div>
