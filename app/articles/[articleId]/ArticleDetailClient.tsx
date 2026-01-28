@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type ProgressStep = {
 	label: string;
@@ -49,14 +49,17 @@ export default function ArticleDetailClient({
 	const [data, setData] = useState<ArticleDetailResponse | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
+	const [isRefreshing, setIsRefreshing] = useState(false);
+	const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+	const isMountedRef = useRef(true);
 
-	useEffect(() => {
-		let isMounted = true;
-		let intervalId: ReturnType<typeof setInterval> | null = null;
-
-		const fetchDetail = async () => {
+	const fetchDetail = useCallback(
+		async (refresh = false) => {
 			try {
-				const response = await fetch(`/api/articles/${articleId}`, {
+				const url = refresh
+					? `/api/articles/${articleId}?refresh=1`
+					: `/api/articles/${articleId}`;
+				const response = await fetch(url, {
 					cache: "no-store",
 				});
 				if (!response.ok) {
@@ -64,35 +67,46 @@ export default function ArticleDetailClient({
 					throw new Error(message?.error ?? "Failed to load article.");
 				}
 				const payload = (await response.json()) as ArticleDetailResponse;
-				if (isMounted) {
+				if (isMountedRef.current) {
 					setData(payload);
 					setIsLoading(false);
+					setIsRefreshing(false);
 					if (payload.article.status === "completed") {
-						if (intervalId) {
-							clearInterval(intervalId);
+						if (intervalRef.current) {
+							clearInterval(intervalRef.current);
+							intervalRef.current = null;
 						}
 					}
 				}
 			} catch (err) {
-				if (isMounted) {
+				if (isMountedRef.current) {
 					setError(
 						err instanceof Error ? err.message : "Something went wrong.",
 					);
 					setIsLoading(false);
+					setIsRefreshing(false);
 				}
 			}
-		};
+		},
+		[articleId],
+	);
+
+	useEffect(() => {
+		isMountedRef.current = true;
 
 		fetchDetail();
-		intervalId = setInterval(fetchDetail, 5000);
+		intervalRef.current = setInterval(() => {
+			void fetchDetail();
+		}, 5000);
 
 		return () => {
-			isMounted = false;
-			if (intervalId) {
-				clearInterval(intervalId);
+			isMountedRef.current = false;
+			if (intervalRef.current) {
+				clearInterval(intervalRef.current);
+				intervalRef.current = null;
 			}
 		};
-	}, [articleId]);
+	}, [articleId, fetchDetail]);
 
 	if (isLoading) {
 		return <div className="text-sm text-neutral-400">Loading article...</div>;
@@ -111,18 +125,36 @@ export default function ArticleDetailClient({
 	}
 
 	const { article, progress } = data;
+	const isCompleted = article.status === "completed";
 
 	return (
 		<div className="flex flex-col gap-6">
 			<header>
 				<div className="text-xs uppercase tracking-wide text-neutral-500">
-					{article.status === "completed"
-						? "Completed Article"
-						: "Generating Article"}
+					{isCompleted ? "Completed Article" : "Generating Article"}
 				</div>
 				<div className="mt-2 text-sm text-neutral-400">
 					Created: {formatDateTime(article.createdAt)}
 				</div>
+				{isCompleted ? (
+					<div className="mt-4 flex items-center gap-3">
+						<button
+							type="button"
+							onClick={() => {
+								setError(null);
+								setIsRefreshing(true);
+								void fetchDetail(true);
+							}}
+							disabled={isRefreshing}
+							className="inline-flex items-center rounded-full border border-neutral-700 bg-neutral-900 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-neutral-200 transition hover:border-neutral-500 hover:text-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							{isRefreshing ? "Refreshing..." : "Re-fetch"}
+						</button>
+						<span className="text-xs text-neutral-500">
+							Use this if the completed content is missing.
+						</span>
+					</div>
+				) : null}
 			</header>
 
 			<section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
@@ -154,7 +186,7 @@ export default function ArticleDetailClient({
 				</div>
 			</section>
 
-			{article.status === "completed" ? (
+			{isCompleted ? (
 				<section className="flex flex-col gap-4">
 					<h1 className="text-2xl font-semibold">
 						{article.title ?? "Untitled Article"}

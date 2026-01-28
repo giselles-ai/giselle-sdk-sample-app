@@ -284,13 +284,16 @@ const buildProgressFromTask = (task: Task) => {
 };
 
 export async function GET(
-	_request: Request,
+	request: Request,
 	{ params }: { params: Promise<{ articleId: string }> },
 ) {
 	const session = await getSession();
 	if (!session) {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 	}
+
+	const { searchParams } = new URL(request.url);
+	const forceRefresh = searchParams.get("refresh") === "1";
 
 	const { articleId } = await params;
 	const [record] = await db
@@ -334,7 +337,10 @@ export async function GET(
 		}
 	}
 
-	if (record.status !== "completed" && task?.status === "completed") {
+	if (
+		task?.status === "completed" &&
+		(record.status !== "completed" || forceRefresh)
+	) {
 		let generated = buildCompletedContent(record.inputJson);
 		let coverImageUrl: string | null = record.coverImageUrl ?? null;
 
