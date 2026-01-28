@@ -1,13 +1,21 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
 	ArticleReferenceImage,
 	ArticleReferenceText,
 	CreateArticleRequest,
 	GenerateImageRequest,
 } from "@/lib/article/schemas";
+
+type ArticleQuota = {
+	limit: number;
+	used: number;
+	remaining: number;
+	nextRefillAt: number | null;
+	windowMs: number;
+};
 
 const createReferenceText = (content: string): ArticleReferenceText => ({
 	id: crypto.randomUUID(),
@@ -44,6 +52,29 @@ export default function ArticlesPage() {
 	);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
+	const [quota, setQuota] = useState<ArticleQuota | null>(null);
+
+	useEffect(() => {
+		let active = true;
+		const loadQuota = async () => {
+			try {
+				const response = await fetch("/api/articles/quota");
+				if (!response.ok) {
+					return;
+				}
+				const data = (await response.json()) as { quota?: ArticleQuota };
+				if (active && data.quota) {
+					setQuota(data.quota);
+				}
+			} catch {
+				// Ignore quota fetch errors to avoid blocking authoring.
+			}
+		};
+		loadQuota();
+		return () => {
+			active = false;
+		};
+	}, []);
 
 	const handleAddText = () => {
 		if (!textInput.trim()) {
@@ -130,6 +161,9 @@ export default function ArticlesPage() {
 
 			if (!response.ok) {
 				const error = await response.json();
+				if (response.status === 429 && error?.quota) {
+					setQuota(error.quota as ArticleQuota);
+				}
 				throw new Error(error?.error ?? "Failed to create article.");
 			}
 
@@ -143,6 +177,17 @@ export default function ArticlesPage() {
 		}
 	};
 
+	const remainingPercent = quota
+		? Math.min(100, (quota.remaining / Math.max(quota.limit, 1)) * 100)
+		: null;
+	const nextRefillText = quota?.nextRefillAt
+		? new Date(quota.nextRefillAt).toLocaleString("ja-JP")
+		: null;
+	const refillHours = quota
+		? Math.round(quota.windowMs / quota.limit / 36e5)
+		: 4;
+	const isOverLimit = quota ? quota.remaining <= 0 : false;
+
 	return (
 		<div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
 			<header>
@@ -152,6 +197,57 @@ export default function ArticlesPage() {
 					let AI generate your article.
 				</p>
 			</header>
+
+			{quota ? (
+				<section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6">
+					<div className="flex flex-wrap items-end justify-between gap-4">
+						<div>
+							<div className="text-xs font-semibold uppercase tracking-[0.2em] text-neutral-500">
+								Daily Meter
+							</div>
+							<h2 className="mt-2 text-2xl font-semibold text-neutral-100">
+								Article Credits
+							</h2>
+							<p className="mt-2 text-sm text-neutral-400">
+								{quota.limit} articles per 24 hours. One credit refills every{" "}
+								{refillHours} hours.
+							</p>
+						</div>
+						<div className="text-right">
+							<div className="text-sm text-neutral-400">Remaining</div>
+							<div className="text-2xl font-semibold text-neutral-100">
+								{quota.remaining}/{quota.limit}
+							</div>
+						</div>
+					</div>
+
+					<div className="mt-5 h-3 w-full overflow-hidden rounded-full bg-neutral-800">
+						<div
+							className="h-full rounded-full bg-neutral-100 transition-all"
+							style={{
+								width:
+									remainingPercent !== null ? `${remainingPercent}%` : "0%",
+							}}
+						/>
+					</div>
+
+					<div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-neutral-400">
+						<div>
+							Create 1 article every {refillHours} hours (up to {quota.limit}{" "}
+							per day).
+						</div>
+						{isOverLimit ? (
+							<div className="text-red-400">
+								Daily limit reached. Next credit at {nextRefillText ?? "soon"}.
+							</div>
+						) : nextRefillText ? (
+							<div>Next credit at {nextRefillText}</div>
+						) : (
+							<div>Meter is full.</div>
+						)}
+					</div>
+				</section>
+			) : null}
 
 			<form className="flex flex-col gap-6" onSubmit={handleSubmit}>
 				<section>
@@ -257,7 +353,7 @@ export default function ArticlesPage() {
 
 				<button
 					type="submit"
-					disabled={isSubmitting}
+					disabled={isSubmitting || isOverLimit}
 					className="flex w-full items-center justify-center gap-2 rounded-xl bg-neutral-200 px-4 py-3 text-sm font-semibold text-neutral-900 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-70"
 				>
 					{isSubmitting ? "Generating..." : "Generate Article"}

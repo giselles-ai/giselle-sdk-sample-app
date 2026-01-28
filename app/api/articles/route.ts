@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { article } from "@/db/articles-schema";
 import { validateCreateArticleRequest } from "@/lib/article/schemas";
+import { getArticleQuota } from "@/lib/article/quota";
 import Giselle from "@giselles-ai/sdk";
 
 const getSession = async () =>
@@ -36,6 +37,17 @@ export async function POST(request: Request) {
 	const session = await getSession();
 	if (!session) {
 		return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+	}
+
+	const quota = await getArticleQuota(session.user.id);
+	if (quota.remaining <= 0) {
+		return NextResponse.json(
+			{
+				error: "Daily article limit reached. Please try again later.",
+				quota,
+			},
+			{ status: 429 },
+		);
 	}
 
 	const payload = await request.json();
