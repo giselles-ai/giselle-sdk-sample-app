@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 type ArticleListItem = {
@@ -11,7 +12,7 @@ type ArticleListItem = {
 };
 
 type SidebarProps = {
-	articles: ArticleListItem[];
+	initialArticles: ArticleListItem[];
 };
 
 const formatDate = (value: Date | number) => {
@@ -23,8 +24,34 @@ const formatDate = (value: Date | number) => {
 	});
 };
 
-export default function Sidebar({ articles }: SidebarProps) {
+export default function Sidebar({ initialArticles }: SidebarProps) {
 	const pathname = usePathname();
+	const [articles, setArticles] = useState<ArticleListItem[]>(initialArticles);
+
+	useEffect(() => {
+		let active = true;
+		const loadArticles = async () => {
+			try {
+				const response = await fetch("/api/articles", { cache: "no-store" });
+				if (!response.ok) {
+					return;
+				}
+				const data = (await response.json()) as {
+					articles?: ArticleListItem[];
+				};
+				if (active && data.articles) {
+					setArticles(data.articles);
+				}
+			} catch {
+				// Ignore sidebar refresh errors to keep navigation responsive.
+			}
+		};
+
+		loadArticles();
+		return () => {
+			active = false;
+		};
+	}, [pathname]);
 
 	return (
 		<aside className="flex h-full w-72 flex-col border-r border-neutral-800 bg-neutral-950 px-4 py-6 text-neutral-100">

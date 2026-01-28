@@ -37,7 +37,7 @@ export default async function ArticlesLayout({
 
 	return (
 		<div className="flex min-h-screen bg-neutral-950 text-neutral-100">
-			<Sidebar articles={articles} />
+			<Sidebar initialArticles={articles} />
 			<main className="flex-1 px-8 py-10">{children}</main>
 		</div>
 	);
