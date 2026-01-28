@@ -10,7 +10,7 @@
 		"typecheck": "bun tsc --noEmit"
 	},
 	"dependencies": {
-		"@giselles-ai/sdk": "0.0.1-dev.ec1e5e",
+		"@giselles-ai/sdk": "0.0.1-dev.llnlpxwk",
 		"@libsql/client": "0.17.0",
 		"better-auth": "1.4.17",
 		"drizzle-orm": "1.0.0-beta.12-a5629fb",

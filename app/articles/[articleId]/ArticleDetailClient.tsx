@@ -84,7 +84,7 @@ export default function ArticleDetailClient({
 		};
 
 		fetchDetail();
-		intervalId = setInterval(fetchDetail, 2000);
+		intervalId = setInterval(fetchDetail, 5000);
 
 		return () => {
 			isMounted = false;
@@ -159,13 +159,6 @@ export default function ArticleDetailClient({
 					<h1 className="text-2xl font-semibold">
 						{article.title ?? "Untitled Article"}
 					</h1>
-					{article.coverImageUrl ? (
-						<img
-							src={article.coverImageUrl}
-							alt={article.title ?? "Article cover"}
-							className="w-full rounded-2xl border border-neutral-800 object-cover"
-						/>
-					) : null}
 					<div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6 text-sm text-neutral-200">
 						<pre className="whitespace-pre-wrap font-sans">
 							{article.bodyMarkdown ?? ""}

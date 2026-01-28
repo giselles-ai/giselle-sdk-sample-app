@@ -59,7 +59,7 @@ export async function POST(request: Request) {
 
     `;
 
-	const { taskId } = await client.app.run({
+	const { taskId } = await client.apps.run({
 		appId: "app-w8hSsCGxtduvLM4H",
 		input: { text: prompt },
 	});

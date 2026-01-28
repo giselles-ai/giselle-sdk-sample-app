@@ -5,23 +5,88 @@ import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { article } from "@/db/articles-schema";
 
-const TOTAL_DURATION_MS = 30000;
-const PROGRESS_STEPS = [
-	"Queued",
-	"Analyzing prompt",
-	"Planning outline",
-	"Generating draft",
-	"Polishing",
-	"Finalizing",
-];
+type TaskStatus =
+	| "created"
+	| "inProgress"
+	| "completed"
+	| "failed"
+	| "cancelled";
+
+type TaskStepStatus =
+	| "created"
+	| "queued"
+	| "running"
+	| "completed"
+	| "failed"
+	| "cancelled";
+
+type TaskStep = {
+	id: string;
+	status: TaskStepStatus;
+	name: string;
+};
+
+type TaskSequence = {
+	id: string;
+	steps: TaskStep[];
+	status: TaskStepStatus;
+};
+
+type Task = {
+	id: string;
+	status: TaskStatus;
+	steps: {
+		queued: number;
+		inProgress: number;
+		completed: number;
+		warning: number;
+		cancelled: number;
+		failed: number;
+	};
+	sequences: TaskSequence[];
+	nodeIdsConnectedToEnd?: string[];
+};
+
+type TaskResponse = {
+	task: Task;
+};
+
+type GeneratedTextOutput = {
+	type: "generated-text";
+	content: string;
+};
+
+type GeneratedImageOutput = {
+	type: "generated-image";
+	contents: Array<{
+		pathname: string;
+	}>;
+};
+
+type GenerationOutput =
+	| GeneratedTextOutput
+	| GeneratedImageOutput
+	| { type: string; [key: string]: unknown };
+
+type TaskOutput = {
+	title: string;
+	generationId: string;
+	outputs: GenerationOutput[];
+};
+
+type TaskWithOutputs = {
+	status: TaskStatus;
+	outputs: TaskOutput[];
+};
+
+type TaskWithOutputsResponse = {
+	task: TaskWithOutputs;
+};
 
 const getSession = async () =>
 	auth.api.getSession({
 		headers: await headers(),
 	});
-
-const getTimestampMs = (value: Date | number) =>
-	value instanceof Date ? value.getTime() : value;
 
 const buildCompletedContent = (inputJson: string) => {
 	try {
@@ -49,6 +114,175 @@ const buildCompletedContent = (inputJson: string) => {
 	}
 };
 
+const resolveGeneratedImageUrl = (pathname: string) => {
+	if (pathname.startsWith("http://") || pathname.startsWith("https://")) {
+		return pathname;
+	}
+	if (!pathname.startsWith("/")) {
+		return `https://studio.giselles.ai/${pathname}`;
+	}
+	if (pathname.startsWith("/generations/")) {
+		return `https://studio.giselles.ai/api${pathname}`;
+	}
+	return `https://studio.giselles.ai${pathname}`;
+};
+
+const extractTitleFromMarkdown = (content: string) => {
+	const headingMatch = content.match(/^#\s+(.+)$/m);
+	if (headingMatch) {
+		return headingMatch[1].trim();
+	}
+	const firstLine = content
+		.split("\n")
+		.map((line) => line.trim())
+		.find((line) => line.length > 0);
+	return firstLine ?? "Untitled Article";
+};
+
+const buildCompletedContentFromOutputs = (
+	outputs: TaskOutput[],
+	fallbackInputJson: string,
+) => {
+	let textContent: string | null = null;
+	let imageUrl: string | null = null;
+
+	for (const output of outputs) {
+		for (const item of output.outputs) {
+			if (item.type === "generated-text" && !textContent) {
+				// @ts-expect-error wip
+				textContent = item.content?.trim() ?? null;
+			}
+			if (item.type === "generated-image" && !imageUrl) {
+				// @ts-expect-error wip
+				const firstImage = item.contents?.[0];
+				if (firstImage?.pathname) {
+					imageUrl = resolveGeneratedImageUrl(firstImage.pathname);
+				}
+			}
+			if (textContent && imageUrl) {
+				break;
+			}
+		}
+		if (textContent && imageUrl) {
+			break;
+		}
+	}
+
+	if (!textContent) {
+		return {
+			...buildCompletedContent(fallbackInputJson),
+			coverImageUrl: imageUrl,
+		};
+	}
+
+	return {
+		title: extractTitleFromMarkdown(textContent),
+		bodyMarkdown: textContent,
+		coverImageUrl: imageUrl,
+	};
+};
+
+const mapTaskStatusToArticleStatus = (
+	status: TaskStatus,
+): "queued" | "generating" | "completed" | "error" => {
+	switch (status) {
+		case "completed":
+			return "completed";
+		case "failed":
+		case "cancelled":
+			return "error";
+		case "inProgress":
+			return "generating";
+		case "created":
+		default:
+			return "queued";
+	}
+};
+
+const buildProgressFromTask = (task: Task) => {
+	const activeStatuses: TaskStepStatus[] = ["created", "queued", "running"];
+	const terminalStatuses: TaskStepStatus[] = ["failed", "cancelled"];
+	const steps = task.sequences.flatMap((sequence) => sequence.steps);
+	const totalSteps = steps.length;
+
+	let activeIndex = steps.findIndex((step) =>
+		activeStatuses.includes(step.status),
+	);
+	if (activeIndex === -1 && totalSteps > 0) {
+		if (task.status === "completed") {
+			activeIndex = totalSteps - 1;
+		} else {
+			const terminalIndex = steps.findIndex((step) =>
+				terminalStatuses.includes(step.status),
+			);
+			if (terminalIndex !== -1) {
+				activeIndex = terminalIndex;
+			}
+		}
+	}
+
+	const progressSteps =
+		totalSteps > 0
+			? steps.map((step, index) => {
+					if (step.status === "completed" || task.status === "completed") {
+						if (index <= activeIndex || step.status === "completed") {
+							return { label: step.name, status: "done" as const };
+						}
+					}
+					if (index === activeIndex) {
+						return { label: step.name, status: "active" as const };
+					}
+					return { label: step.name, status: "pending" as const };
+				})
+			: [
+					{
+						label:
+							task.status === "completed"
+								? "Completed"
+								: task.status === "failed"
+									? "Failed"
+									: task.status === "cancelled"
+										? "Cancelled"
+										: "Queued",
+						status:
+							task.status === "completed"
+								? ("done" as const)
+								: ("active" as const),
+					},
+				];
+
+	const completedCount = steps.filter(
+		(step) => step.status === "completed",
+	).length;
+	let percent = 0;
+	if (task.status === "completed") {
+		percent = 100;
+	} else if (totalSteps > 0) {
+		const inProgressBoost = activeIndex >= 0 ? 0.5 : 0;
+		percent = Math.min(
+			99,
+			Math.round(((completedCount + inProgressBoost) / totalSteps) * 100),
+		);
+	}
+
+	const phase =
+		task.status === "completed"
+			? "Completed"
+			: task.status === "failed"
+				? "Failed"
+				: task.status === "cancelled"
+					? "Cancelled"
+					: activeIndex >= 0 && steps[activeIndex]
+						? steps[activeIndex].name
+						: "Queued";
+
+	return {
+		percent,
+		phase,
+		steps: progressSteps,
+	};
+};
+
 export async function GET(
 	_request: Request,
 	{ params }: { params: Promise<{ articleId: string }> },
@@ -69,22 +303,78 @@ export async function GET(
 		return NextResponse.json({ error: "Not found" }, { status: 404 });
 	}
 
-	const createdAtMs = getTimestampMs(record.createdAt);
-	const elapsedMs = Math.max(0, Date.now() - createdAtMs);
-	const percent = Math.min(
-		100,
-		Math.round((elapsedMs / TOTAL_DURATION_MS) * 100),
-	);
-	const stepIndex = Math.min(
-		PROGRESS_STEPS.length - 1,
-		Math.floor((elapsedMs / TOTAL_DURATION_MS) * PROGRESS_STEPS.length),
-	);
+	let task: Task | null = null;
 
-	if (record.status !== "completed" && percent >= 100) {
-		const generated = buildCompletedContent(record.inputJson);
-		const coverImageUrl =
-			record.coverImageUrl ??
-			"https://placehold.co/1200x675/png?text=Generated+Cover";
+	try {
+		const result = await fetch(
+			`https://studio.giselles.ai/api/apps/app-w8hSsCGxtduvLM4H/tasks/${record.giselleTaskId}`,
+			{
+				headers: {
+					authorization: `Bearer ${process.env.GISELLE_API_KEY}`,
+				},
+				cache: "no-store",
+			},
+		);
+		if (result.ok) {
+			const json = (await result.json()) as TaskResponse;
+			task = json.task ?? null;
+		}
+	} catch {
+		task = null;
+	}
+
+	if (task) {
+		const nextStatus = mapTaskStatusToArticleStatus(task.status);
+		if (record.status !== nextStatus) {
+			await db
+				.update(article)
+				.set({ status: nextStatus })
+				.where(eq(article.id, record.id));
+			record.status = nextStatus;
+		}
+	}
+
+	if (record.status !== "completed" && task?.status === "completed") {
+		let generated = buildCompletedContent(record.inputJson);
+		let coverImageUrl: string | null = record.coverImageUrl ?? null;
+
+		const endNodeIds = task?.nodeIdsConnectedToEnd ?? [];
+
+		try {
+			const resultWithOutputs = await fetch(
+				`https://studio.giselles.ai/api/apps/app-w8hSsCGxtduvLM4H/tasks/${record.giselleTaskId}?includeGenerations=1`,
+				{
+					headers: {
+						authorization: `Bearer ${process.env.GISELLE_API_KEY}`,
+					},
+					cache: "no-store",
+				},
+			);
+			if (resultWithOutputs.ok && endNodeIds.length > 0) {
+				const json =
+					(await resultWithOutputs.json()) as TaskWithOutputsResponse;
+				const outputs = json.task?.outputs ?? [];
+				if (outputs.length > 0) {
+					const extracted = buildCompletedContentFromOutputs(
+						outputs,
+						record.inputJson,
+					);
+					generated = {
+						title: extracted.title,
+						bodyMarkdown: extracted.bodyMarkdown,
+					};
+					if (!coverImageUrl && extracted.coverImageUrl) {
+						coverImageUrl = extracted.coverImageUrl;
+					}
+				}
+			}
+		} catch {
+			// Keep fallback content when outputs are unavailable.
+		}
+
+		if (!coverImageUrl) {
+			coverImageUrl = "https://placehold.co/1200x675/png?text=Generated+Cover";
+		}
 
 		await db
 			.update(article)
@@ -102,6 +392,19 @@ export async function GET(
 		record.coverImageUrl = coverImageUrl;
 	}
 
+	const progress = task
+		? buildProgressFromTask(task)
+		: {
+				percent: record.status === "completed" ? 100 : 0,
+				phase: record.status === "completed" ? "Completed" : "Queued",
+				steps: [
+					{
+						label: record.status === "completed" ? "Completed" : "Queued",
+						status: record.status === "completed" ? "done" : "active",
+					},
+				],
+			};
+
 	return NextResponse.json({
 		article: {
 			id: record.id,
@@ -113,18 +416,6 @@ export async function GET(
 			updatedAt: record.updatedAt,
 			errorMessage: record.errorMessage,
 		},
-		progress: {
-			percent,
-			phase: PROGRESS_STEPS[stepIndex],
-			steps: PROGRESS_STEPS.map((label, index) => ({
-				label,
-				status:
-					index < stepIndex
-						? "done"
-						: index === stepIndex
-							? "active"
-							: "pending",
-			})),
-		},
+		progress,
 	});
 }
