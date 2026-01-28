@@ -5,6 +5,7 @@
     "": {
       "name": "giselle-demo-app",
       "dependencies": {
+        "@giselles-ai/sdk": "^0.0.1-dev.173bc3c6c",
         "@libsql/client": "0.17.0",
         "better-auth": "1.4.17",
         "drizzle-orm": "1.0.0-beta.12-a5629fb",
@@ -158,6 +159,8 @@
     "@esbuild/win32-ia32": ["@esbuild/win32-ia32@0.25.12", "", { "os": "win32", "cpu": "ia32" }, "sha512-HkqnmmBoCbCwxUKKNPBixiWDGCpQGVsrQfJoVGYLPT41XWF8lHuE5N6WhVia2n4o5QK5M4tYr21827fNhi4byQ=="],
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.25.12", "", { "os": "win32", "cpu": "x64" }, "sha512-alJC0uCZpTFrSL0CCDjcgleBXPnCrEAhTBILpeAp7M/OFgoqtAetfBzX0xM00MUsVVPpVjlPuMbREqnZCXaTnA=="],
+
+    "@giselles-ai/sdk": ["@giselles-ai/sdk@0.0.1-dev.ec1e5e", "", {}, "sha512-VI5efslAB2s71cLfLXcNw/wD1VLbZcRFRmH5MfN+iVfFZ77kxzIto7gQY1YEi5WgkshsQeLXXxVKorJ2HefxTQ=="],
 
     "@img/colour": ["@img/colour@1.0.0", "", {}, "sha512-A5P/LfWGFSl6nsckYtjw9da+19jB8hkJ6ACTGcDfEJ0aE+l2n2El7dsVM7UVHZQ9s2lmYMWlrS21YLy2IR1LUw=="],
 

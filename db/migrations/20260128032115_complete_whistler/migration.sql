@@ -2,6 +2,7 @@ CREATE TABLE `article` (
 	`id` text PRIMARY KEY,
 	`user_id` text NOT NULL,
 	`status` text DEFAULT 'queued' NOT NULL,
+	`giselle_task_id` text NOT NULL,
 	`title` text,
 	`body_markdown` text,
 	`cover_image_url` text,

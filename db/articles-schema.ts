@@ -10,6 +10,7 @@ export const article = sqliteTable(
 			.notNull()
 			.references(() => user.id, { onDelete: "cascade" }),
 		status: text("status").notNull().default("queued"),
+		giselleTaskId: text("giselle_task_id").notNull(),
 		title: text("title"),
 		bodyMarkdown: text("body_markdown"),
 		coverImageUrl: text("cover_image_url"),

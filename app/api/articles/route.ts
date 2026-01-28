@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { article } from "@/db/articles-schema";
 import { validateCreateArticleRequest } from "@/lib/article/schemas";
+import Giselle from "@giselles-ai/sdk";
 
 const getSession = async () =>
 	auth.api.getSession({
@@ -45,16 +46,31 @@ export async function POST(request: Request) {
 		);
 	}
 
+	const client = new Giselle({
+		apiKey: process.env.GISELLE_API_KEY,
+	});
+
+	const prompt = `
+    <THEME>${payload.prompt.description}</THEME>
+
+    <REFERENCES>
+    ${payload.references.texts.join("\n--------------------------\n")}
+    </REFERENCES>
+
+    `;
+
+	const { taskId } = await client.app.run({
+		appId: "app-w8hSsCGxtduvLM4H",
+		input: { text: prompt },
+	});
+
 	const articleId = crypto.randomUUID();
 	await db.insert(article).values({
 		id: articleId,
 		userId: session.user.id,
+		giselleTaskId: taskId,
 		status: "generating",
-		title: null,
-		bodyMarkdown: null,
-		coverImageUrl: null,
 		inputJson: JSON.stringify(payload),
-		errorMessage: null,
 	});
 
 	return NextResponse.json({ articleId });
